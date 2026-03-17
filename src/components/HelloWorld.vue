@@ -6,6 +6,7 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js"
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js"
 import { HDRLoader } from "three/examples/jsm/Addons.js"
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js'
+import { playerController } from "three-player-controller"
 
 const container = ref(null)
 
@@ -14,6 +15,7 @@ let camera
 let renderer
 let tilesRenderer
 let controls
+let player
 
 init();
 
@@ -25,7 +27,7 @@ async function init() {
   
   // 加载 HDR - 使用 RGBELoader 替代 HDRLoader
   const rgbeLoader = new RGBELoader()
-  const envMap = await rgbeLoader.loadAsync('./hdr/suburban_garden_2k.hdr')
+  const envMap = await rgbeLoader.loadAsync('./hdr/indoor.hdr')
   envMap.mapping = THREE.EquirectangularReflectionMapping
   scene.environment = envMap
   scene.background = envMap
@@ -36,7 +38,7 @@ async function init() {
     0.1,
     100000
   )
-  camera.position.set(20, 20, 20)
+  camera.position.set(0, 0, 0)
 
   renderer = new THREE.WebGLRenderer({ antialias: true })
   renderer.setSize(
@@ -47,11 +49,7 @@ async function init() {
   renderer.toneMappingExposure = 1.0
 
   container.value.appendChild(renderer.domElement)
-
   controls = new OrbitControls(camera, renderer.domElement)
-  controls.enableDamping = true
-  controls.dampingFactor = 0.05
-
   // 3DTiles
   tilesRenderer = new TilesRenderer("./models/out/tileset.json")
 
@@ -60,9 +58,6 @@ async function init() {
     /\.gltf$/,
     new GLTFLoader()
   )
-
-  tilesRenderer.setCamera(camera)
-  tilesRenderer.setResolutionFromRenderer(camera, renderer)
 
   // 更新矩阵并设置相机位置
   let loadedTileSetHandled = false
@@ -92,20 +87,64 @@ async function init() {
     tilesRenderer.group.matrix.copy(finalMatrix); // 设置矩阵
     tilesRenderer.group.matrixAutoUpdate = false; // 禁止自动更新矩阵
     tilesRenderer.group.updateMatrixWorld(true); // 更新矩阵
+    tilesRenderer.group.setResolutionFromRenderer(camera,renderer);
+    tilesRenderer.group.setCamera(camera);
   })
 
   scene.add(tilesRenderer.group)
+  tilesRenderer.setResolutionFromRenderer(camera, renderer)
+  tilesRenderer.setCamera(camera)
+
+  await initPlayer()
+
+  // 窗口大小监听
+  onWindowResize();
+  window.addEventListener("resize",onWindowResize,false);
   animate()
 }
 
+async function initPlayer() {
+    player = playerController();
+    renderer.render(scene, camera);
+    await player.init({
+        scene,
+        camera,
+        controls,
+        playerModel: {
+            url: "./glb/person2.glb",
+            scale: 0.001,
+            idleAnim: "idle",
+            walkAnim: "walk",
+            runAnim: "run",
+            jumpAnim: "jump",
+        },
+        initPos: new THREE.Vector3(0, 0, 10),
+    });
+}
+
+
 function animate() {
+  tilesRenderer.setResolutionFromRenderer(camera,renderer);
+  tilesRenderer.setCamera(camera);
   requestAnimationFrame(animate)
   camera.updateMatrixWorld()
   controls.update()
   tilesRenderer.update()
-  renderer.render(scene, camera)
 
+  if (player) player.update()
+
+  renderer.render(scene, camera)
 }
+
+function onWindowResize() {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    renderer.setSize(window.innerWidth, window.innerHeight);
+
+    camera.updateProjectionMatrix();
+    renderer.setPixelRatio(window.devicePixelRatio);
+    tilesRenderer.setResolutionFromRenderer(camera, renderer);
+}
+
 </script>
 
 <template>
